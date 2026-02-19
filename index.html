@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LAFD Sign-In Sheet</title>
+  <meta name="description" content="Digital sign-in sheet for LAFD program participants. Sign in with a stylus or finger." />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ════════════════ HEADER ════════════════ -->
+<header class="app-header no-print">
+  <div class="header-inner">
+    <span class="app-tagline">Digital Sign-In Sheet</span>
+    <div class="header-actions">
+      <button id="adminToggleBtn" class="btn btn-ghost" onclick="toggleAdmin()">⚙️ Admin</button>
+      <button class="btn btn-outline" onclick="generateQR()">📱 QR Code</button>
+    </div>
+  </div>
+</header>
+
+<!-- ════════════════ ADMIN PANEL ════════════════ -->
+<section id="adminPanel" class="admin-panel no-print hidden">
+  <div class="admin-inner">
+    <h2>⚙️ Admin Settings</h2>
+    <p class="admin-desc">Configure dropdown options and extra fields. Changes are saved automatically.</p>
+
+    <div class="admin-grid" id="dropdownAdminGrid">
+      <!-- Dropdown editors injected by JS -->
+    </div>
+
+    <div class="admin-section">
+      <h3>➕ Extra Custom Fields</h3>
+      <p class="admin-desc">Add extra text or dropdown fields to the sign-in form.</p>
+      <div id="extraFieldsAdmin"></div>
+      <button class="btn btn-sm btn-primary" onclick="addExtraField()">+ Add Text Field</button>
+      <button class="btn btn-sm btn-outline" onclick="addExtraDropdown()">+ Add Dropdown Field</button>
+    </div>
+
+    <div class="admin-section">
+      <h3>📧 Email Settings</h3>
+      <label class="form-label">Recipient email (default: grants@lacity.org)</label>
+      <input type="email" id="emailRecipient" class="form-input" placeholder="grants@lacity.org" value="grants@lacity.org" onchange="saveEmailRecipient()" />
+      <label class="form-label" style="margin-top:0.75rem">CC (optional, your team email)</label>
+      <input type="email" id="emailCC" class="form-input" placeholder="yourteam@example.com" onchange="saveEmailCC()" />
+    </div>
+
+    <div class="admin-section">
+      <h3>📋 Form Title & Program Info</h3>
+      <label class="form-label">Sign-In Sheet Title</label>
+      <input type="text" id="sheetTitle" class="form-input" placeholder="LAFD Fire Safety Program" onchange="saveSheetTitle()" />
+      <label class="form-label" style="margin-top:0.75rem">Subtitle / Program Description</label>
+      <input type="text" id="sheetSubtitle" class="form-input" placeholder="Participant Sign-In Sheet" onchange="saveSheetSubtitle()" />
+    </div>
+
+    <button class="btn btn-danger" onclick="clearAllData()">🗑️ Clear All Sign-In Data</button>
+  </div>
+</section>
+
+<!-- ════════════════ SIGN-IN SHEET (PRINT VIEW) ════════════════ -->
+<main class="sheet-container">
+
+  <!-- LOGO + TITLE SECTION -->
+  <div class="sheet-header">
+    <div class="logo-area">
+      <div class="logo-wrap" onclick="document.getElementById('logoInput').click()" title="Click to upload your team logo">
+        <img id="logoImg" src="" alt="Team Logo" class="logo-img hidden" />
+        <div id="logoPlaceholder" class="logo-placeholder">
+          <span class="logo-icon">🏛️</span>
+          <span class="logo-hint no-print">Click to upload logo (PNG)</span>
+          <span class="logo-hint print-only">Team Logo</span>
+        </div>
+      </div>
+      <input type="file" id="logoInput" accept="image/png,image/jpeg,image/svg+xml" class="hidden" onchange="uploadLogo(event)" />
+    </div>
+    <div class="title-area">
+      <h1 id="displayTitle" class="sheet-title">LAFD Fire Safety Program</h1>
+      <p id="displaySubtitle" class="sheet-subtitle">Participant Sign-In Sheet</p>
+    </div>
+    <div class="lafd-badge">
+      <span class="badge-text">LAFD</span>
+      <span class="badge-sub">Los Angeles Fire Department</span>
+    </div>
+  </div>
+
+  <!-- FORM SECTION -->
+  <div class="form-section no-print">
+    <h2 class="form-heading">New Sign-In Entry</h2>
+
+    <!-- Standard Dropdowns -->
+    <div class="form-grid" id="standardDropdownsGrid">
+      <!-- Injected by JS -->
+    </div>
+
+    <!-- Extra Custom Fields -->
+    <div class="form-grid" id="extraFieldsForm">
+      <!-- Injected by JS -->
+    </div>
+
+    <!-- Signature & Initials -->
+    <div class="sig-row">
+      <div class="sig-block">
+        <label class="form-label">Full Signature <span class="hint">(sign with finger or stylus)</span></label>
+        <div class="canvas-wrap">
+          <canvas id="sigCanvas" width="400" height="120"></canvas>
+        </div>
+        <div class="canvas-actions">
+          <button class="btn btn-sm btn-ghost" onclick="clearCanvas('sigCanvas')">✕ Clear</button>
+        </div>
+      </div>
+      <div class="sig-block sig-block-sm">
+        <label class="form-label">Initials</label>
+        <div class="canvas-wrap">
+          <canvas id="initCanvas" width="160" height="120"></canvas>
+        </div>
+        <div class="canvas-actions">
+          <button class="btn btn-sm btn-ghost" onclick="clearCanvas('initCanvas')">✕ Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary btn-lg" onclick="submitSignIn()">✅ Submit Sign-In</button>
+      <button class="btn btn-ghost" onclick="resetForm()">↺ Reset</button>
+    </div>
+  </div>
+
+  <!-- RECORDS TABLE -->
+  <div class="records-section">
+    <div class="records-header no-print">
+      <h2 class="form-heading">Sign-In Records</h2>
+      <div class="records-actions">
+        <button class="btn btn-primary" onclick="emailSheet()">📧 Email to LAFD</button>
+        <button class="btn btn-outline" onclick="window.print()">🖨️ Print</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇️ CSV</button>
+      </div>
+    </div>
+
+    <!-- Print date/info -->
+    <div class="print-info print-only">
+      <p>Printed: <span id="printDate"></span></p>
+    </div>
+
+    <div class="table-wrap">
+      <table id="recordsTable">
+        <thead id="tableHead">
+          <!-- Injected by JS -->
+        </thead>
+        <tbody id="tableBody">
+          <!-- Injected by JS -->
+        </tbody>
+      </table>
+      <div id="emptyState" class="empty-state">
+        <span>📋</span>
+        <p>No sign-ins yet. Submit the form above to get started.</p>
+      </div>
+    </div>
+
+    <!-- Signature print area -->
+    <div id="printSigArea" class="print-sig-area print-only">
+      <!-- Injected on print -->
+    </div>
+  </div>
+</main>
+
+<!-- ════════════════ QR MODAL ════════════════ -->
+<div id="qrModal" class="modal-overlay hidden" onclick="closeQR(event)">
+  <div class="modal-card">
+    <button class="modal-close" onclick="closeQRBtn()">✕</button>
+    <h2>📱 Share This App</h2>
+    <p>Scan or share this QR code so your team can open the sign-in sheet on any device.</p>
+    <div id="qrContainer" class="qr-container"></div>
+    <p class="qr-url" id="qrUrlDisplay"></p>
+    <p class="qr-note">⚠️ QR code only works when the app is hosted at a public URL (e.g., GitHub Pages). It won't work for local files.</p>
+    <div style="display:flex;gap:0.5rem;justify-content:center;margin-top:1rem">
+      <button class="btn btn-primary" onclick="copyURL()">📋 Copy URL</button>
+      <button class="btn btn-outline" onclick="closeQRBtn()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ TOAST ════════════════ -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
