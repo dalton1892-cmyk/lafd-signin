@@ -1,190 +1,316 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LAFD Sign-In Sheet</title>
-  <meta name="description" content="Digital sign-in sheet for LAFD program participants. Sign in with a stylus or finger." />
+  <meta name="description"
+    content="Digital sign-in sheet for LAFD program participants. Sign in with a stylus or finger." />
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- QRious for local QR code generation -->
+  <script src="https://cdnjs.cloudflare.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <!-- html2pdf for PDF exports -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
+
 <body>
 
-<!-- ════════════════ HEADER ════════════════ -->
-<header class="app-header no-print">
-  <div class="header-inner">
-    <span class="app-tagline">Digital Sign-In Sheet</span>
-    <div class="header-actions">
-      <button id="adminToggleBtn" class="btn btn-ghost" onclick="toggleAdmin()">⚙️ Admin</button>
-      <button class="btn btn-outline" onclick="generateQR()">📱 QR Code</button>
-    </div>
-  </div>
-</header>
-
-<!-- ════════════════ ADMIN PANEL ════════════════ -->
-<section id="adminPanel" class="admin-panel no-print hidden">
-  <div class="admin-inner">
-    <h2>⚙️ Admin Settings</h2>
-    <p class="admin-desc">Configure dropdown options and extra fields. Changes are saved automatically.</p>
-
-    <div class="admin-grid" id="dropdownAdminGrid">
-      <!-- Dropdown editors injected by JS -->
-    </div>
-
-    <div class="admin-section">
-      <h3>➕ Extra Custom Fields</h3>
-      <p class="admin-desc">Add extra text or dropdown fields to the sign-in form.</p>
-      <div id="extraFieldsAdmin"></div>
-      <button class="btn btn-sm btn-primary" onclick="addExtraField()">+ Add Text Field</button>
-      <button class="btn btn-sm btn-outline" onclick="addExtraDropdown()">+ Add Dropdown Field</button>
-    </div>
-
-    <div class="admin-section">
-      <h3>📧 Email Settings</h3>
-      <label class="form-label">Recipient email (default: grants@lacity.org)</label>
-      <input type="email" id="emailRecipient" class="form-input" placeholder="grants@lacity.org" value="grants@lacity.org" onchange="saveEmailRecipient()" />
-      <label class="form-label" style="margin-top:0.75rem">CC (optional, your team email)</label>
-      <input type="email" id="emailCC" class="form-input" placeholder="yourteam@example.com" onchange="saveEmailCC()" />
-    </div>
-
-    <div class="admin-section">
-      <h3>📋 Form Title & Program Info</h3>
-      <label class="form-label">Sign-In Sheet Title</label>
-      <input type="text" id="sheetTitle" class="form-input" placeholder="LAFD Fire Safety Program" onchange="saveSheetTitle()" />
-      <label class="form-label" style="margin-top:0.75rem">Subtitle / Program Description</label>
-      <input type="text" id="sheetSubtitle" class="form-input" placeholder="Participant Sign-In Sheet" onchange="saveSheetSubtitle()" />
-    </div>
-
-    <button class="btn btn-danger" onclick="clearAllData()">🗑️ Clear All Sign-In Data</button>
-  </div>
-</section>
-
-<!-- ════════════════ SIGN-IN SHEET (PRINT VIEW) ════════════════ -->
-<main class="sheet-container">
-
-  <!-- LOGO + TITLE SECTION -->
-  <div class="sheet-header">
-    <div class="logo-area">
-      <div class="logo-wrap" onclick="document.getElementById('logoInput').click()" title="Click to upload your team logo">
-        <img id="logoImg" src="" alt="Team Logo" class="logo-img hidden" />
-        <div id="logoPlaceholder" class="logo-placeholder">
-          <span class="logo-icon">🏛️</span>
-          <span class="logo-hint no-print">Click to upload logo (PNG)</span>
-          <span class="logo-hint print-only">Team Logo</span>
-        </div>
-      </div>
-      <input type="file" id="logoInput" accept="image/png,image/jpeg,image/svg+xml" class="hidden" onchange="uploadLogo(event)" />
-    </div>
-    <div class="title-area">
-      <h1 id="displayTitle" class="sheet-title">LAFD Fire Safety Program</h1>
-      <p id="displaySubtitle" class="sheet-subtitle">Participant Sign-In Sheet</p>
-    </div>
-    <div class="lafd-badge">
-      <span class="badge-text">LAFD</span>
-      <span class="badge-sub">Los Angeles Fire Department</span>
-    </div>
-  </div>
-
-  <!-- FORM SECTION -->
-  <div class="form-section no-print">
-    <h2 class="form-heading">New Sign-In Entry</h2>
-
-    <!-- Standard Dropdowns -->
-    <div class="form-grid" id="standardDropdownsGrid">
-      <!-- Injected by JS -->
-    </div>
-
-    <!-- Extra Custom Fields -->
-    <div class="form-grid" id="extraFieldsForm">
-      <!-- Injected by JS -->
-    </div>
-
-    <!-- Signature & Initials -->
-    <div class="sig-row">
-      <div class="sig-block">
-        <label class="form-label">Full Signature <span class="hint">(sign with finger or stylus)</span></label>
-        <div class="canvas-wrap">
-          <canvas id="sigCanvas" width="400" height="120"></canvas>
-        </div>
-        <div class="canvas-actions">
-          <button class="btn btn-sm btn-ghost" onclick="clearCanvas('sigCanvas')">✕ Clear</button>
-        </div>
-      </div>
-      <div class="sig-block sig-block-sm">
-        <label class="form-label">Initials</label>
-        <div class="canvas-wrap">
-          <canvas id="initCanvas" width="160" height="120"></canvas>
-        </div>
-        <div class="canvas-actions">
-          <button class="btn btn-sm btn-ghost" onclick="clearCanvas('initCanvas')">✕ Clear</button>
-        </div>
+  <!-- ════════════════ HEADER ════════════════ -->
+  <header class="app-header no-print">
+    <div class="header-inner">
+      <span class="app-tagline">Digital Sign-In Sheet</span>
+      <div class="header-actions">
+        <button class="btn btn-ghost" onclick="window.print()">🖨️ Print</button>
+        <button class="btn btn-ghost" onclick="emailSheet()">📧 Email</button>
+        <button class="btn btn-ghost" onclick="exportExcel()">📊 Excel</button>
+        <button class="btn btn-ghost" onclick="exportCSV()">⬇️ CSV</button>
+        <button class="btn btn-ghost" onclick="exportPDF()">📄 PDF</button>
+        <div style="width:1px;height:24px;background:rgba(255,255,255,0.2);margin:0 0.5rem;"></div>
+        <button id="adminToggleBtn" class="btn btn-ghost" onclick="toggleAdmin()">⚙️ Admin</button>
+        <button class="btn btn-outline" onclick="openTrainingQR()">📱 QR Codes</button>
+        <button id="syncBtn" class="btn btn-primary" onclick="pullCloudRecords()">☁️ Pull Cloud Data</button>
       </div>
     </div>
+  </header>
 
-    <div class="form-actions">
-      <button class="btn btn-primary btn-lg" onclick="submitSignIn()">✅ Submit Sign-In</button>
-      <button class="btn btn-ghost" onclick="resetForm()">↺ Reset</button>
+  <!-- ════════════════ ADMIN PANEL ════════════════ -->
+  <section id="adminPanel" class="admin-panel no-print hidden">
+    <div class="admin-inner">
+      <h2>⚙️ Admin Settings</h2>
+      <p class="admin-desc">Configure dropdown options and extra fields. Changes are saved automatically.</p>
+
+      <div class="admin-grid" id="dropdownAdminGrid">
+        <!-- Dropdown editors injected by JS -->
+      </div>
+
+      <div class="admin-section">
+        <h3>➕ Extra Custom Fields</h3>
+        <p class="admin-desc">Add extra text or dropdown fields to the sign-in form.</p>
+        <div id="extraFieldsAdmin"></div>
+        <button class="btn btn-sm btn-primary" onclick="addExtraField()">+ Add Text Field</button>
+        <button class="btn btn-sm btn-outline" onclick="addExtraDropdown()">+ Add Dropdown Field</button>
+      </div>
+
+      <div class="admin-section">
+        <h3>📧 Email Settings</h3>
+        <label class="form-label">Recipient email (default: grants@lacity.org)</label>
+        <input type="email" id="emailRecipient" class="form-input" placeholder="grants@lacity.org"
+          value="grants@lacity.org" onchange="saveEmailRecipient()" />
+        <label class="form-label" style="margin-top:0.75rem">CC (optional, your team email)</label>
+        <input type="email" id="emailCC" class="form-input" placeholder="yourteam@example.com"
+          onchange="saveEmailCC()" />
+      </div>
+
+      <div class="admin-section">
+        <h3>📅 Class Dates & Times</h3>
+        <p class="admin-desc">Set the date range and time for this multi-day class. Initials will only be requested for
+          the current date. Start and End times must use Military Format (24h).</p>
+        <div class="admin-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem;">
+          <div class="form-group">
+            <label class="form-label">Class Start Date</label>
+            <input type="date" id="adminStartDate" class="form-input" onchange="saveClassConfig()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Class End Date</label>
+            <input type="date" id="adminEndDate" class="form-input" onchange="saveClassConfig()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Class Start Time (24h)</label>
+            <input type="text" id="adminStartTime" class="form-input" placeholder="08:00" maxlength="5"
+              pattern="([01][0-9]|2[0-3]):[0-5][0-9]" onchange="saveClassConfig()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Class End Time (24h)</label>
+            <input type="text" id="adminEndTime" class="form-input" placeholder="17:00" maxlength="5"
+              pattern="([01][0-9]|2[0-3]):[0-5][0-9]" onchange="saveClassConfig()" />
+          </div>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <h3>📋 Form Title &amp; Logos</h3>
+
+        <div style="display:flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 200px;">
+            <label class="form-label" style="display:block; margin-bottom:0.5rem;">Left Logo</label>
+            <input type="file" id="leftLogoInput" accept="image/png,image/jpeg,image/svg+xml" class="hidden"
+              onchange="uploadLogo(event, 'left')" />
+            <button class="btn btn-sm btn-outline" onclick="document.getElementById('leftLogoInput').click()">Upload
+              Left Logo</button>
+            <button class="btn btn-sm btn-ghost" onclick="clearLogo('left')">Clear</button>
+          </div>
+          <div style="flex: 1; min-width: 200px;">
+            <label class="form-label" style="display:block; margin-bottom:0.5rem;">Right Logo</label>
+            <input type="file" id="rightLogoInput" accept="image/png,image/jpeg,image/svg+xml" class="hidden"
+              onchange="uploadLogo(event, 'right')" />
+            <button class="btn btn-sm btn-outline" onclick="document.getElementById('rightLogoInput').click()">Upload
+              Right Logo</button>
+            <button class="btn btn-sm btn-ghost" onclick="clearLogo('right')">Clear</button>
+          </div>
+        </div>
+
+        <label class="form-label">Sign-In Sheet Title</label>
+        <input type="text" id="sheetTitle" class="form-input" placeholder="LAFD Fire Safety Program"
+          onchange="saveSheetTitle()" />
+        <label class="form-label" style="margin-top:0.75rem">Subtitle / Program Description</label>
+        <input type="text" id="sheetSubtitle" class="form-input" placeholder="Participant Sign-In Sheet"
+          onchange="saveSheetSubtitle()" />
+      </div>
+
+      <div class="admin-section">
+        <h3>☁️ Live Sync (Google Sheets)</h3>
+        <p class="admin-desc">Enter your Google Apps Script URL to automatically sync sign-ins across devices. Students
+          will sign in on their phones, and data will appear here.</p>
+        <label class="form-label">Google Sync URL</label>
+        <input type="text" id="syncUrl" class="form-input" placeholder="https://script.google.com/..."
+          onchange="saveSyncUrl()" />
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+          <button class="btn btn-sm btn-primary" onclick="pullCloudRecords()">Sync Now</button>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <h3>📂 Local Backup &amp; Storage</h3>
+        <p class="admin-desc">Save a backup file of your current roster and settings to your computer.</p>
+        <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+          <button class="btn btn-outline" onclick="exportAppData()">💾 Export All Data</button>
+          <button class="btn btn-ghost" onclick="triggerImport()">📂 Import Backup</button>
+          <input type="file" id="importInput" class="hidden" accept=".json" onchange="importAppData(event)" />
+        </div>
+      </div>
+
+      <button class="btn btn-danger" onclick="clearAllData()" style="margin-top:2rem;">⚠️ Factory Reset App</button>
     </div>
-  </div>
+  </section>
 
-  <!-- RECORDS TABLE -->
-  <div class="records-section">
-    <div class="records-header no-print">
-      <h2 class="form-heading">Sign-In Records</h2>
-      <div class="records-actions">
-        <button class="btn btn-primary" onclick="emailSheet()">📧 Email to LAFD</button>
-        <button class="btn btn-outline" onclick="window.print()">🖨️ Print</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇️ CSV</button>
+  <!-- ════════════════ SIGN-IN SHEET (PRINT VIEW) ════════════════ -->
+  <main class="sheet-container">
+
+    <!-- LOGO + TITLE SECTION -->
+    <div class="sheet-header">
+      <div class="logo-area">
+        <div class="logo-wrap">
+          <img id="logoImg" src="" alt="Team Logo" class="logo-img hidden" />
+          <div id="logoPlaceholder" class="logo-placeholder">
+            <span class="logo-icon">🏛️</span>
+            <span class="logo-hint print-only">Left Logo</span>
+          </div>
+        </div>
+      </div>
+      <div class="sheet-title-info">
+        <h1 id="displayTitle" class="sheet-title">LAFD Fire Safety Program</h1>
+        <p id="displaySubtitle" class="sheet-subtitle">Participant Sign-In Sheet</p>
+        <div id="displayClassInfo" class="sheet-class-info"
+          style="margin-top:0.5rem; font-size:1.1rem; color:var(--navy); font-weight:600;"></div>
+      </div>
+      <div class="logo-area" style="text-align: right;">
+        <div class="logo-wrap">
+          <img id="rightLogoImg" src="" alt="Attached Logo" class="logo-img hidden" />
+          <div id="rightLogoPlaceholder" class="logo-placeholder">
+            <span class="logo-icon">📷</span>
+            <span class="logo-hint print-only">Right Logo</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Print date/info -->
-    <div class="print-info print-only">
-      <p>Printed: <span id="printDate"></span></p>
-    </div>
+    <!-- FORM SECTION -->
+    <div class="form-section no-print" style="padding-top:1.5rem;">
+      <!-- Name (always first, required) -->
+      <div class="form-group student-name-group" style="margin-bottom:1rem;">
+        <input type="text" class="form-input form-input-lg student-name-input" id="studentName"
+          placeholder="Enter or select name… *" autocomplete="off" list="studentNameList" />
+        <datalist id="studentNameList"></datalist>
+      </div>
+      <!-- Standard Dropdowns (program, location, instructor, session — date handled above) -->
+      <div class="form-grid" id="standardDropdownsGrid">
+        <!-- Injected by JS -->
+      </div>
 
-    <div class="table-wrap">
-      <table id="recordsTable">
-        <thead id="tableHead">
-          <!-- Injected by JS -->
-        </thead>
-        <tbody id="tableBody">
-          <!-- Injected by JS -->
-        </tbody>
-      </table>
-      <div id="emptyState" class="empty-state">
-        <span>📋</span>
-        <p>No sign-ins yet. Submit the form above to get started.</p>
+      <!-- Extra Custom Fields -->
+      <div class="form-grid" id="extraFieldsForm">
+        <!-- Injected by JS -->
+      </div>
+
+      <!-- Live Timestamp Clock -->
+      <div class="timestamp-row">
+        <div class="clock-display">
+          <span class="clock-label">📅 Current Date & Time</span>
+          <span id="liveClock" class="clock-value">—</span>
+        </div>
+        <div class="timestamp-actions">
+          <button class="btn btn-outline btn-sm" onclick="stampTimeIn()">⏱ Stamp Time-In</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearTimeIn()">✕ Clear</button>
+          <span id="stampedTime" class="stamped-time hidden">—</span>
+        </div>
+      </div>
+
+      <!-- Signature & Initials -->
+      <div class="sig-row">
+        <div class="sig-block">
+          <label class="form-label">Full Signature <span class="hint">(sign with finger or stylus)</span></label>
+          <div class="canvas-wrap">
+            <canvas id="sigCanvas" width="400" height="120"></canvas>
+          </div>
+          <div class="canvas-actions">
+            <button class="btn btn-sm btn-ghost" onclick="clearCanvas('sigCanvas')">✕ Clear</button>
+          </div>
+        </div>
+
+        <!-- Dynamic Initials for Multi-Day Class -->
+        <div id="dynamicInitialsWrap" style="display: flex; gap: 1rem; flex-wrap: wrap;"></div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary btn-lg" onclick="submitSignIn()">✅ Submit Sign-In</button>
+        <button class="btn btn-ghost" onclick="resetForm()">↺ Reset</button>
       </div>
     </div>
 
-    <!-- Signature print area -->
-    <div id="printSigArea" class="print-sig-area print-only">
-      <!-- Injected on print -->
+
+    <!-- RECORDS TABLE -->
+    <div class="records-section">
+      <div class="records-header no-print" style="margin-bottom: 0;">
+        <h2 class="form-heading">Sign-In Records</h2>
+      </div>
+
+      <!-- Print date/info -->
+      <div class="print-info print-only">
+        <p>Printed: <span id="printDate"></span></p>
+      </div>
+
+      <div class="table-wrap">
+        <table id="recordsTable">
+          <thead id="tableHead">
+            <!-- Injected by JS -->
+          </thead>
+          <tbody id="tableBody">
+            <!-- Injected by JS -->
+          </tbody>
+        </table>
+        <div id="emptyState" class="empty-state">
+          <span>📋</span>
+          <p>No sign-ins yet. Submit the form above to get started.</p>
+        </div>
+      </div>
+
+      <!-- Signature print area -->
+      <div id="printSigArea" class="print-sig-area print-only">
+        <!-- Injected on print -->
+      </div>
+    </div>
+  </main>
+
+  <!-- ════════════════ TRAINING QR MODAL ════════════════ -->
+  <div id="trainingQRModal" class="modal-overlay hidden" onclick="closeTrainingQROverlay(event)">
+    <div class="modal-card modal-card-wide">
+      <button class="modal-close" onclick="closeTrainingQRModal()">✕</button>
+      <h2>📱 Training QR Codes</h2>
+      <p>Create a QR code for each training. Scanning it opens the sign-in sheet pre-filled with that training's info.
+      </p>
+
+      <!-- Add new training -->
+      <div class="training-add-row">
+        <input id="newTrainingName" class="form-input" placeholder="Training name (e.g. Fire Safety 101 – March 2026)"
+          onkeydown="if(event.key==='Enter') addTraining()" />
+        <button class="btn btn-primary" onclick="addTraining()">+ Add</button>
+      </div>
+
+      <div id="trainingList" class="training-list">
+        <!-- Injected by JS -->
+      </div>
+
+      <p class="qr-note" style="margin-top:1rem">⚠️ QR codes only work when the app is hosted at a public URL (e.g.
+        GitHub Pages).</p>
     </div>
   </div>
-</main>
 
-<!-- ════════════════ QR MODAL ════════════════ -->
-<div id="qrModal" class="modal-overlay hidden" onclick="closeQR(event)">
-  <div class="modal-card">
-    <button class="modal-close" onclick="closeQRBtn()">✕</button>
-    <h2>📱 Share This App</h2>
-    <p>Scan or share this QR code so your team can open the sign-in sheet on any device.</p>
-    <div id="qrContainer" class="qr-container"></div>
-    <p class="qr-url" id="qrUrlDisplay"></p>
-    <p class="qr-note">⚠️ QR code only works when the app is hosted at a public URL (e.g., GitHub Pages). It won't work for local files.</p>
-    <div style="display:flex;gap:0.5rem;justify-content:center;margin-top:1rem">
-      <button class="btn btn-primary" onclick="copyURL()">📋 Copy URL</button>
-      <button class="btn btn-outline" onclick="closeQRBtn()">Close</button>
+  <!-- ════════════════ SINGLE QR VIEW MODAL ════════════════ -->
+  <div id="qrModal" class="modal-overlay hidden" onclick="closeQR(event)">
+    <div class="modal-card">
+      <button class="modal-close" onclick="closeQRBtn()">✕</button>
+      <h2 id="qrModalTitle">📱 QR Code</h2>
+      <p id="qrModalDesc">Scan this QR code to open the sign-in sheet for this training.</p>
+      <div id="qrContainer" class="qr-container"></div>
+      <p class="qr-url" id="qrUrlDisplay"></p>
+      <div style="display:flex;gap:0.5rem;justify-content:center;margin-top:1rem">
+        <button class="btn btn-primary" onclick="copyQRURL()">📋 Copy URL</button>
+        <button class="btn btn-outline" onclick="downloadQR()">⬇️ Download QR</button>
+        <button class="btn btn-ghost" onclick="closeQRBtn()">Close</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ════════════════ TOAST ════════════════ -->
-<div id="toast" class="toast hidden"></div>
+  <!-- ════════════════ TOAST ════════════════ -->
+  <div id="toast" class="toast hidden"></div>
 
-<script src="app.js"></script>
+  <script src="app.js"></script>
 </body>
+
 </html>
