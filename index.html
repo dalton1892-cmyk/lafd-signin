@@ -17,6 +17,18 @@
   <script src="https://cdnjs.cloudflare.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
   <!-- html2pdf for PDF exports -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script>
+    // Auth guard — runs before anything else
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var urlRole = params.get('role');
+      var stored = sessionStorage.getItem('lafd_role');
+      // If already logged in as staff and scanning a student QR, keep staff role
+      if (stored && stored !== 'student') { /* keep going */ }
+      else if (urlRole === 'student') { sessionStorage.setItem('lafd_role', 'student'); }
+      else if (!stored) { window.location.replace('login.html'); }
+    })();
+  </script>
 </head>
 
 <body>
@@ -25,16 +37,18 @@
   <header class="app-header no-print">
     <div class="header-inner">
       <span class="app-tagline">Digital Sign-In Sheet</span>
-      <div class="header-actions">
+      <div class="header-actions" id="headerActions">
+        <span id="roleIndicator" class="role-badge"></span>
         <button class="btn btn-ghost" onclick="window.print()">🖨️ Print</button>
         <button class="btn btn-ghost" onclick="emailSheet()">📧 Email</button>
         <button class="btn btn-ghost" onclick="exportExcel()">📊 Excel</button>
         <button class="btn btn-ghost" onclick="exportCSV()">⬇️ CSV</button>
         <button class="btn btn-ghost" onclick="exportPDF()">📄 PDF</button>
         <div style="width:1px;height:24px;background:rgba(255,255,255,0.2);margin:0 0.5rem;"></div>
-        <button id="adminToggleBtn" class="btn btn-ghost" onclick="toggleAdmin()">⚙️ Admin</button>
+        <button id="adminToggleBtn" class="btn btn-ghost admin-only" onclick="toggleAdmin()">⚙️ Admin</button>
         <button class="btn btn-outline" onclick="openTrainingQR()">📱 QR Codes</button>
         <button id="syncBtn" class="btn btn-primary" onclick="pullCloudRecords()">☁️ Pull Cloud Data</button>
+        <button class="btn btn-ghost" onclick="logout()" style="margin-left:0.25rem;">🔓 Logout</button>
       </div>
     </div>
   </header>
@@ -123,7 +137,22 @@
           onchange="saveSheetSubtitle()" />
       </div>
 
-      <div class="admin-section">
+      <div class="admin-section admin-only">
+        <h3>👤 Instructor Accounts</h3>
+        <p class="admin-desc">Create login credentials for instructors. They use their department email and the password
+          you set here.</p>
+        <div id="instructorAccountsList" style="margin-bottom:1rem;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+          <input type="text" id="newInstrName" class="form-input" placeholder="Display Name (e.g. Captain Garcia)" />
+          <input type="email" id="newInstrEmail" class="form-input" placeholder="email@lacity.org" />
+          <input type="password" id="newInstrPass" class="form-input" placeholder="Password" />
+          <input type="text" id="newInstrEid" class="form-input" placeholder="EID # (optional)" />
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="addInstructorAccount()" style="margin-top:0.5rem;">+ Add
+          Instructor Account</button>
+      </div>
+
+      <div class="admin-section admin-only">
         <h3>☁️ Live Sync (Google Sheets)</h3>
         <p class="admin-desc">Enter your Google Apps Script URL to automatically sync sign-ins across devices. Students
           will sign in on their phones, and data will appear here.</p>
@@ -135,7 +164,7 @@
         </div>
       </div>
 
-      <div class="admin-section">
+      <div class="admin-section admin-only">
         <h3>📂 Local Backup &amp; Storage</h3>
         <p class="admin-desc">Save a backup file of your current roster and settings to your computer.</p>
         <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
@@ -145,7 +174,8 @@
         </div>
       </div>
 
-      <button class="btn btn-danger" onclick="clearAllData()" style="margin-top:2rem;">⚠️ Factory Reset App</button>
+      <button class="btn btn-danger admin-only" onclick="clearAllData()" style="margin-top:2rem;">⚠️ Factory Reset
+        App</button>
     </div>
   </section>
 

@@ -27,8 +27,140 @@ let trainings = [];   // [{ id, name }]
 let _currentQRUrl = '';   // for copy/download
 let currentStampedTime = null;
 let syncUrl = ""; // Google Apps Script URL for live database
+let instructorAccounts = []; // Managed by admin
+
+// ─── AUTH & ROLES ─────────────────────────────────
+const ADMIN_EMAIL = 'lafd.grants@lacity.org';
+const ADMIN_PASS = 'FigPlaza1225$$';
+
+function checkAuth() {
+  const role = sessionStorage.getItem('lafd_role');
+  if (!role) { window.location.replace('login.html'); return null; }
+  return role;
+}
+
+function logout() {
+  sessionStorage.clear();
+  window.location.replace('login.html');
+}
+
+function applyRoleBasedUI(role) {
+  document.body.setAttribute('data-role', role);
+
+  // Set role badge
+  const badge = document.getElementById('roleIndicator');
+  if (badge) {
+    const labels = { admin: '🔑 Admin', instructor: '👤 Instructor', student: '🎓 Student' };
+    badge.textContent = labels[role] || role;
+    badge.style.display = (role === 'student') ? 'none' : 'inline-flex';
+  }
+
+  if (role === 'admin') return; // Full access — nothing to restrict
+
+  // Hide admin-only controls
+  document.querySelectorAll('.admin-only').forEach(el => { el.style.display = 'none'; });
+  // Hide records table for non-admins
+  const rec = document.querySelector('.records-section');
+  if (rec) rec.style.display = 'none';
+
+  if (role === 'instructor') {
+    // Pre-fill instructor's own name and EID
+    const iData = JSON.parse(sessionStorage.getItem('lafd_instructorData') || 'null');
+    if (iData) {
+      const nameEl = document.getElementById('studentName');
+      if (nameEl) { nameEl.value = iData.displayName || ''; nameEl.readOnly = true; nameEl.style.background = '#eef'; }
+      const eidEl = document.getElementById('field_eid');
+      if (eidEl) { eidEl.value = iData.eid || ''; }
+    }
+    // Lock non-personal fields
+    restrictFormForRole('instructor');
+  }
+
+  if (role === 'student') {
+    // Export bar unnecessary for students
+    document.querySelectorAll('.btn-ghost, .btn-outline, .btn-primary').forEach(b => {
+      if (b.id !== 'submitBtn') b.style.display = 'none';
+    });
+    restrictFormForRole('student');
+  }
+}
+
+function restrictFormForRole(role) {
+  // Hide all standard dropdown groups except EID and date
+  const grid = document.getElementById('standardDropdownsGrid');
+  if (grid) {
+    grid.querySelectorAll('.form-group').forEach(group => {
+      const input = group.querySelector('input, select');
+      if (!input) return;
+      const id = input.id;
+      if (id === 'field_eid' || id === 'field_date') return; // Keep visible
+      group.style.display = 'none'; // Hide pre-filled fields
+    });
+  }
+  // Hide extra custom fields for student/instructor
+  const extraGrid = document.getElementById('extraFieldsForm');
+  if (extraGrid) extraGrid.style.display = 'none';
+}
+
+// ─── INSTRUCTOR ACCOUNT MANAGEMENT (Admin only) ───
+function renderInstructorAccounts() {
+  instructorAccounts = JSON.parse(localStorage.getItem('lafd_instructorAccounts') || '[]');
+  const container = document.getElementById('instructorAccountsList');
+  if (!container) return;
+
+  if (instructorAccounts.length === 0) {
+    container.innerHTML = '<p style="color:#9ca3af;font-size:0.8rem;">No instructor accounts yet.</p>';
+    return;
+  }
+
+  container.innerHTML = instructorAccounts.map((a, i) => `
+    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;background:rgba(255,255,255,0.05);border-radius:8px;margin-bottom:0.4rem;">
+      <span style="flex:1;color:#fff;font-size:0.85rem;"><strong>${escHtml(a.displayName)}</strong> — ${escHtml(a.email)}</span>
+      <span style="color:#9ca3af;font-size:0.8rem;">EID: ${escHtml(a.eid || '—')}</span>
+      <button class="btn btn-sm btn-danger" onclick="removeInstructorAccount(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function addInstructorAccount() {
+  const displayName = document.getElementById('newInstrName').value.trim();
+  const email = document.getElementById('newInstrEmail').value.trim().toLowerCase();
+  const password = document.getElementById('newInstrPass').value;
+  const eid = document.getElementById('newInstrEid').value.trim();
+
+  if (!displayName || !email || !password) {
+    showToast('⚠️ Name, email and password are required.');
+    return;
+  }
+  if (instructorAccounts.find(a => a.email === email)) {
+    showToast('⚠️ An account with that email already exists.');
+    return;
+  }
+
+  instructorAccounts.push({ displayName, email, password, eid });
+  localStorage.setItem('lafd_instructorAccounts', JSON.stringify(instructorAccounts));
+
+  // Clear fields
+  ['newInstrName', 'newInstrEmail', 'newInstrPass', 'newInstrEid'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderInstructorAccounts();
+  showToast(`✅ Instructor account created for ${displayName}.`);
+}
+
+function removeInstructorAccount(idx) {
+  if (!confirm(`Remove account for ${instructorAccounts[idx].displayName}?`)) return;
+  instructorAccounts.splice(idx, 1);
+  localStorage.setItem('lafd_instructorAccounts', JSON.stringify(instructorAccounts));
+  renderInstructorAccounts();
+  showToast('Account removed.');
+}
 
 document.addEventListener('DOMContentLoaded', () => {
+  const role = checkAuth();
+  if (!role) return; // redirect in progress
+
   loadState();
   applyURLParams();       // Pre-fill from QR code URL params
   renderAdminDropdowns();
@@ -40,8 +172,12 @@ document.addEventListener('DOMContentLoaded', () => {
   restoreLogo();
   restoreSheetMeta();
   renderTrainingList();
+  renderInstructorAccounts();
   document.getElementById('printDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   startClock();
+
+  // Apply role UI AFTER all rendering is done
+  applyRoleBasedUI(role);
 });
 
 // ─── PERSISTENCE ──────────────────────────────────
@@ -548,19 +684,22 @@ function submitSignIn() {
     return;
   }
 
-  let missingField = false;
-  dropdownConfig.forEach((dd) => {
-    const el = document.getElementById(`field_${dd.id}`);
-    if (!el || !el.value.trim()) missingField = true;
-  });
-  extraFields.forEach((_, i) => {
-    const el = document.getElementById(`extra_${i}`);
-    if (!el || !el.value.trim()) missingField = true;
-  });
-
-  if (missingField) {
-    showToast('⚠️ Please fill out all required fields.');
-    return;
+  // Only require ALL fields for admin; students/instructors get pre-filled fields
+  const role = sessionStorage.getItem('lafd_role') || 'student';
+  if (role === 'admin') {
+    let missingField = false;
+    dropdownConfig.forEach((dd) => {
+      const el = document.getElementById(`field_${dd.id}`);
+      if (!el || !el.value.trim()) missingField = true;
+    });
+    extraFields.forEach((_, i) => {
+      const el = document.getElementById(`extra_${i}`);
+      if (!el || !el.value.trim()) missingField = true;
+    });
+    if (missingField) {
+      showToast('⚠️ Please fill out all required fields.');
+      return;
+    }
   }
 
   let entry = {};
@@ -928,47 +1067,49 @@ function exportPDF() {
   if (records.length === 0) { showToast('⚠️ No records to export.'); return; }
   showToast('📄 Generating PDF... Please wait.');
 
-  // Add class to body to override styles for PDF capture
+  // Reset scroll to top before adding export styles
+  window.scrollTo(0, 0);
   document.body.classList.add('is-pdf-exporting');
 
+  const sheet = document.querySelector('.sheet-container');
+
   const opt = {
-    margin: 0, // Zero margin to shift everything to the extreme left
+    margin: 0.15, // Small safety margin to prevent edge-cutting
     filename: `lafd-signin-${new Date().toISOString().split('T')[0]}.pdf`,
-    image: { type: 'jpeg', quality: 1 },
+    image: { type: 'jpeg', quality: 0.95 },
     html2canvas: {
-      scale: 2,
+      scale: 1.5, // High resolution balance
       useCORS: true,
       logging: false,
-      width: 1300,
-      windowWidth: 1300,
+      width: 1100,
+      windowWidth: 1100,
       scrollY: 0,
-      scrollX: 0,
-      x: 0,
-      y: 0
+      scrollX: 0
     },
     jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape', compress: true }
   };
 
-  // Ensure high-res signatures and logos are fully loaded
+  // Wait for digital signatures and logo images to settle in the DOM
   setTimeout(() => {
-    const sheet = document.querySelector('.sheet-container');
     if (!sheet) {
       document.body.classList.remove('is-pdf-exporting');
       showToast('⚠️ Error: Could not find sign-in sheet.');
       return;
     }
 
-    // Capture from the absolute top-left
-    window.scrollTo(0, 0);
-    html2pdf().set(opt).from(sheet).save().then(() => {
+    // Unified call syntax is sometimes more stable across browsers
+    html2pdf(sheet, opt).then(() => {
       document.body.classList.remove('is-pdf-exporting');
     }).catch(err => {
       console.error("PDF generation failed:", err);
       document.body.classList.remove('is-pdf-exporting');
       showToast('⚠️ Error generating PDF.');
     });
-  }, 1500);
+  }, 2000);
 }
+
+
+
 
 // ─── TRAINING QR CODES ───────────────────────────
 function openTrainingQR() {
@@ -1026,15 +1167,27 @@ function showTrainingQR(id) {
   const training = trainings.find(t => t.id === id);
   if (!training) return;
 
-  // Build URL with training param
+  // Build URL — include ALL current class field values for student pre-fill
   const u = new URL(window.location.href);
+  u.search = '';
+  u.searchParams.set('role', 'student');
   u.searchParams.set('training', training.name);
+
+  // Capture current form field values so students get them pre-filled
+  dropdownConfig.forEach(dd => {
+    const el = document.getElementById(`field_${dd.id}`);
+    if (el && el.value.trim()) u.searchParams.set(dd.id, el.value.trim());
+  });
+  extraFields.forEach((f, i) => {
+    const el = document.getElementById(`extra_${i}`);
+    if (el && el.value.trim()) u.searchParams.set(`extra_${i}`, el.value.trim());
+  });
+
   const url = u.toString();
   _currentQRUrl = url;
 
-  // Open the QR view modal
   document.getElementById('qrModalTitle').textContent = `📱 ${training.name}`;
-  document.getElementById('qrModalDesc').textContent = 'Scan this QR code to open the sign-in sheet for this training.';
+  document.getElementById('qrModalDesc').textContent = 'Scan to open the pre-filled sign-in form for this training.';
   document.getElementById('qrUrlDisplay').textContent = url;
 
   const container = document.getElementById('qrContainer');
@@ -1042,7 +1195,7 @@ function showTrainingQR(id) {
   const size = 260;
 
   if (typeof QRious === 'undefined') {
-    container.innerHTML = '<div class="hint" style="color:var(--danger); padding:1rem;">⚠️ QR Library failed to load. Please check your internet connection or use a different browser.</div>';
+    container.innerHTML = '<div class="hint" style="color:var(--danger);padding:1rem;">⚠️ QR Library failed to load.</div>';
     document.getElementById('qrModal').classList.remove('hidden');
     return;
   }
@@ -1053,15 +1206,8 @@ function showTrainingQR(id) {
   container.appendChild(canvas);
 
   try {
-    new QRious({
-      element: canvas,
-      value: url,
-      size: size,
-      background: 'white',
-      foreground: '#0D1B2A' // Use navy for better scanning contrast
-    });
+    new QRious({ element: canvas, value: url, size, background: 'white', foreground: '#0D1B2A' });
   } catch (e) {
-    console.error("QR Generation failed:", e);
     container.innerHTML = '<div class="hint">⚠️ Could not generate QR code.</div>';
   }
 

@@ -1057,6 +1057,45 @@ tbody tr.sig-row-display {
   }
 }
 
+/* ── ROLE-BASED VISIBILITY ── */
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(200, 169, 81, 0.2);
+  border: 1px solid rgba(200, 169, 81, 0.4);
+  border-radius: 100px;
+  padding: 0.25rem 0.75rem;
+  color: #C8A951;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-right: 0.5rem;
+}
+
+/* Student: strip all export/nav actions */
+body[data-role="student"] .app-header .header-actions>*:not(#submitBtnArea) {
+  display: none !important;
+}
+
+body[data-role="student"] .records-section {
+  display: none !important;
+}
+
+/* Instructor: hide admin controls and records */
+body[data-role="instructor"] .admin-only,
+body[data-role="instructor"] .records-section {
+  display: none !important;
+}
+
+/* Pre-filled read-only name for instructors */
+body[data-role="instructor"] #studentName[readonly] {
+  background: rgba(100, 120, 255, 0.08) !important;
+  border-color: rgba(100, 120, 255, 0.35) !important;
+  color: var(--navy) !important;
+  cursor: not-allowed;
+}
+
 /* ── PDF EXPORT HELPER ── */
 body.is-pdf-exporting {
   background: white !important;
@@ -1087,18 +1126,16 @@ body.is-pdf-exporting .info-row td:last-child {
 }
 
 body.is-pdf-exporting .sheet-container {
-  width: 1300px !important;
+  width: 1100px !important;
   max-width: none !important;
-  margin: 0 !important;
+  margin: 0 auto !important;
+  /* Centered in capture area */
   padding: 0 !important;
   box-shadow: none !important;
   border: none !important;
   overflow: visible !important;
   display: block !important;
   background: white !important;
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
 }
 
 body.is-pdf-exporting .table-wrap {
