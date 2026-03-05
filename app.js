@@ -28,6 +28,9 @@ let _currentQRUrl = '';   // for copy/download
 let currentStampedTime = null;
 let syncUrl = ""; // Google Apps Script URL for live database
 let instructorAccounts = []; // Managed by admin
+let pendingAttachment = null; // Temp storage for file being attached
+let activeDateFilter = null;  // null = show all, otherwise 'YYYY-MM-DD'
+let sessionArchives = [];     // [{ name, date, records[] }]
 
 // ─── AUTH & ROLES ─────────────────────────────────
 const ADMIN_EMAIL = 'lafd.grants@lacity.org';
@@ -209,17 +212,20 @@ function loadState() {
 
     syncUrl = localStorage.getItem('lafd_syncUrl') || "";
     if (document.getElementById('syncUrl')) document.getElementById('syncUrl').value = syncUrl;
+    sessionArchives = JSON.parse(localStorage.getItem('lafd_sessionArchives') || '[]');
   } catch (e) {
     dropdownConfig = JSON.parse(JSON.stringify(DEFAULT_DROPDOWNS));
     extraFields = [];
     records = [];
     trainings = [];
+    sessionArchives = [];
   }
 }
 function saveDropdowns() { localStorage.setItem('lafd_dropdowns', JSON.stringify(dropdownConfig)); }
 function saveExtraFields() { localStorage.setItem('lafd_extraFields', JSON.stringify(extraFields)); }
 function saveRecords() { localStorage.setItem('lafd_records', JSON.stringify(records)); }
 function saveTrainings() { localStorage.setItem('lafd_trainings', JSON.stringify(trainings)); }
+function saveArchives() { localStorage.setItem('lafd_sessionArchives', JSON.stringify(sessionArchives)); }
 function saveEmailRecipient() { localStorage.setItem('lafd_emailRecipient', document.getElementById('emailRecipient').value); }
 function saveEmailCC() { localStorage.setItem('lafd_emailCC', document.getElementById('emailCC').value); }
 function saveSyncUrl() {
@@ -731,6 +737,12 @@ function submitSignIn() {
     if (el && el.value) entry[`extra_${i}`] = el.value;
   });
 
+  // Attach any pending file
+  if (pendingAttachment) {
+    entry.attachment = pendingAttachment;
+    pendingAttachment = null;
+  }
+
   if (existingIdx === -1) records.push(entry);
 
   saveRecords();
@@ -743,7 +755,7 @@ function submitSignIn() {
     showToast('☁️ Syncing to Google Sheets...');
     fetch(syncUrl, {
       method: "POST",
-      mode: "no-cors", // Required for many institutional GS accounts
+      mode: "no-cors",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(entry)
     }).then(() => {
@@ -814,17 +826,24 @@ function renderTable() {
     `<th>${escHtml(l)}</th>`
   ).join('')}<th class="no-print">Delete</th></tr>`;
 
-  tbody.innerHTML = '';
+  // Apply day session date filter
+  const displayRecords = activeDateFilter
+    ? records.filter(r => matchesDateFilter(r, activeDateFilter))
+    : records;
 
-  if (records.length === 0) {
+  if (displayRecords.length === 0) {
     table.style.display = 'none';
     empty.style.display = 'flex';
+    empty.querySelector('p').textContent = activeDateFilter
+      ? `No sign-ins found for ${activeDateFilter}. Try 'Show All' to see all records.`
+      : 'No sign-ins yet. Submit the form above to get started.';
     return;
   }
   table.style.display = '';
   empty.style.display = 'none';
 
-  records.forEach((r, idx) => {
+  displayRecords.forEach((r, idx) => {
+    const realIdx = records.indexOf(r);
     // Row 1: The info fields
     const trInfo = document.createElement('tr');
     trInfo.classList.add('info-row');
@@ -841,7 +860,7 @@ function renderTable() {
       cellsInfo += `<td>${escHtml(r[`extra_${i}`] || '—')}</td>`;
     });
 
-    cellsInfo += `<td class="no-print"><button class="btn btn-sm btn-danger" onclick="deleteRecord(${idx})">✕</button></td>`;
+    cellsInfo += `<td class="no-print"><button class="btn btn-sm btn-danger" onclick="deleteRecord(${realIdx})">✕</button></td>`;
     trInfo.innerHTML = cellsInfo;
     tbody.appendChild(trInfo);
 
@@ -876,6 +895,22 @@ function renderTable() {
       });
 
       sigContent += `</div></div>`;
+    }
+
+    // Add attachment if present
+    if (r.attachment) {
+      const isImage = r.attachment.type && r.attachment.type.startsWith('image/');
+      sigContent += `<div class="sig-display-item" style="margin-top:0.5rem;">
+        <span class="sig-display-label">📎 Attachment:</span>
+        <div class="sig-display-box" style="padding:0.25rem 0.5rem;">
+          ${isImage && r.attachment.data
+          ? `<img src="${r.attachment.data}" alt="attachment" style="max-height:60px;border-radius:4px;" />`
+          : ''
+        }
+          <a href="${r.attachment.data || '#'}" download="${escHtml(r.attachment.name)}" target="_blank"
+             style="color:#C8A951;font-size:0.8rem;display:block;margin-top:0.2rem;">⬇ ${escHtml(r.attachment.name)}</a>
+        </div>
+      </div>`;
     }
 
     sigContent += `</div>`;
@@ -1303,6 +1338,147 @@ function importAppData(event) {
     }
   };
   reader.readAsText(file);
+}
+
+
+// ─── FILE ATTACHMENT ─────────────────────────────
+function handleAttachmentChange(e) {
+  const file = e.target.files[0];
+  if (!file) { pendingAttachment = null; return; }
+
+  const MAX = 500 * 1024; // 500 KB
+  if (file.size > MAX) {
+    showToast('⚠️ File too large. Please choose a file under 500KB.');
+    e.target.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    pendingAttachment = { name: file.name, type: file.type, data: ev.target.result };
+    document.getElementById('attachmentName').textContent = `📎 ${file.name}`;
+    const clearBtn = document.getElementById('clearAttachBtn');
+    if (clearBtn) clearBtn.style.display = 'inline-flex';
+    showToast(`📎 Attached: ${file.name}`);
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearAttachment() {
+  pendingAttachment = null;
+  const inp = document.getElementById('attachmentInput');
+  if (inp) inp.value = '';
+  document.getElementById('attachmentName').textContent = '— No file chosen';
+  const clearBtn = document.getElementById('clearAttachBtn');
+  if (clearBtn) clearBtn.style.display = 'none';
+}
+
+// ─── DAY SESSION FILTER ──────────────────────────
+function applyDateFilter() {
+  const picker = document.getElementById('sessionDateFilter');
+  activeDateFilter = picker ? picker.value : null;
+  renderTable();
+  const countEl = document.getElementById('sessionFilterCount');
+  if (countEl && activeDateFilter) {
+    const filtered = records.filter(r => matchesDateFilter(r, activeDateFilter));
+    countEl.textContent = `${filtered.length} record(s) on ${activeDateFilter}`;
+  } else if (countEl) {
+    countEl.textContent = '';
+  }
+}
+
+function clearDateFilter() {
+  activeDateFilter = null;
+  const picker = document.getElementById('sessionDateFilter');
+  if (picker) picker.value = '';
+  const countEl = document.getElementById('sessionFilterCount');
+  if (countEl) countEl.textContent = '';
+  renderTable();
+}
+
+function matchesDateFilter(r, dateStr) {
+  // Match if the record's Today's Date field equals the filter date
+  if (r.date === dateStr) return true;
+  // OR if the record has initials for that date
+  if (r.initialsObj && r.initialsObj[dateStr]) return true;
+  // OR if the record's stampedTime is on that date
+  if (r.stampedTime) {
+    const d = new Date(r.stampedTime);
+    const dStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    if (dStr === dateStr) return true;
+  }
+  return false;
+}
+
+// ─── NEW DAY SESSION ─────────────────────────────
+function openNewDaySession() {
+  const modal = document.getElementById('newDayModal');
+  if (!modal) return;
+  // Pre-fill with tomorrow's date
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tStr = tomorrow.toISOString().split('T')[0];
+  document.getElementById('newDayDate').value = tStr;
+  document.getElementById('newDayName').value = `Day ${sessionArchives.length + 2} — ${tStr}`;
+  modal.classList.remove('hidden');
+}
+
+function closeNewDayModal() {
+  document.getElementById('newDayModal').classList.add('hidden');
+}
+
+function confirmNewDaySession() {
+  const name = document.getElementById('newDayName').value.trim();
+  const date = document.getElementById('newDayDate').value;
+  if (!name || !date) { showToast('⚠️ Please enter a session name and date.'); return; }
+
+  // Archive current records
+  sessionArchives.push({ name, date: date, archivedAt: new Date().toISOString(), records: JSON.parse(JSON.stringify(records)) });
+  saveArchives();
+
+  // Keep only unique student info, strip signatures/timestamps for fresh start
+  const carryOver = records.map(r => ({
+    id: Date.now() + Math.random(),
+    studentName: r.studentName,
+    // Carry over class fields
+    ...Object.fromEntries(dropdownConfig.map(dd => [dd.id, r[dd.id] || ''])),
+    initialsObj: {},
+    // No signature, timestamp, or initials — fresh for new day
+  }));
+
+  records = carryOver;
+  saveRecords();
+
+  // Update the class date to match new session
+  const dateFieldEl = document.getElementById('field_date');
+  if (dateFieldEl) dateFieldEl.value = date;
+
+  closeNewDayModal();
+  renderTable();
+  showToast(`✅ New session "${name}" started! ${carryOver.length} students carried over.`);
+}
+
+function exportDayRoster() {
+  const date = activeDateFilter || getTodayStr();
+  const filtered = records.filter(r => matchesDateFilter(r, date));
+  if (filtered.length === 0) { showToast('⚠️ No records for selected date.'); return; }
+
+  const headers = ['#', 'Name', 'Time-In', ...dropdownConfig.map(d => d.label), 'Signed', 'Initialed'];
+  const rows = filtered.map((r, i) => {
+    const vals = [i + 1, r.studentName || '—', r.stampedTime ? formatTime(r.stampedTime) : '—'];
+    dropdownConfig.forEach(dd => vals.push(r[dd.id] || '—'));
+    vals.push(r.signature ? 'Yes' : 'No');
+    vals.push(r.initialsObj && r.initialsObj[date] ? 'Yes' : 'No');
+    return vals.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+  });
+
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `roster-${date}.csv`; a.click();
+  URL.revokeObjectURL(url);
+  showToast(`📄 Day roster exported for ${date}.`);
 }
 
 // ─── GOOGLE CLOUD SYNC ───────────────────────────

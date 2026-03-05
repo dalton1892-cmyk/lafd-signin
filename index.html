@@ -257,17 +257,46 @@
         <div id="dynamicInitialsWrap" style="display: flex; gap: 1rem; flex-wrap: wrap;"></div>
       </div>
 
+      <!-- Attachment Upload (Instructor / Admin only) -->
+      <div id="attachmentSection" class="form-group" style="margin-top:0.5rem;">
+        <label class="form-label">📎 Attach Document <span class="hint">(optional — images or PDF, max
+            500KB)</span></label>
+        <div class="attachment-upload-row">
+          <input type="file" id="attachmentInput" accept="image/*,.pdf" onchange="handleAttachmentChange(event)"
+            style="display:none;" />
+          <button class="btn btn-sm btn-outline" onclick="document.getElementById('attachmentInput').click()">📂 Choose
+            File</button>
+          <span id="attachmentName" class="hint" style="margin-left:0.5rem;">— No file chosen</span>
+          <button class="btn btn-sm btn-ghost" onclick="clearAttachment()" id="clearAttachBtn" style="display:none;">✕
+            Remove</button>
+        </div>
+      </div>
+
       <div class="form-actions">
         <button class="btn btn-primary btn-lg" onclick="submitSignIn()">✅ Submit Sign-In</button>
-        <button class="btn btn-ghost" onclick="resetForm()">↺ Reset</button>
+        <button class="btn btn-ghost" onclick="resetForm()">&#8634; Reset</button>
       </div>
     </div>
 
 
     <!-- RECORDS TABLE -->
     <div class="records-section">
-      <div class="records-header no-print" style="margin-bottom: 0;">
+      <div class="records-header no-print" style="margin-bottom:0.5rem;">
         <h2 class="form-heading">Sign-In Records</h2>
+        <!-- Day Session Controls -->
+        <div class="day-session-bar" id="daySessionBar">
+          <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+            <label style="font-size:0.82rem; font-weight:600; color:#C8A951;">Filter by Date:</label>
+            <input type="date" id="sessionDateFilter" class="form-input" style="width:auto;"
+              onchange="applyDateFilter()" />
+            <button class="btn btn-sm btn-ghost" onclick="clearDateFilter()">Show All</button>
+            <span id="sessionFilterCount" class="hint" style="margin-left:0.25rem;"></span>
+          </div>
+          <div style="display:flex; gap:0.5rem;">
+            <button class="btn btn-sm btn-outline admin-only" onclick="openNewDaySession()">📅 New Day Session</button>
+            <button class="btn btn-sm btn-outline admin-only" onclick="exportDayRoster()">📄 Export Day Roster</button>
+          </div>
+        </div>
       </div>
 
       <!-- Print date/info -->
@@ -296,6 +325,30 @@
       </div>
     </div>
   </main>
+
+  <!-- ════════════════ NEW DAY SESSION MODAL ════════════════ -->
+  <div id="newDayModal" class="modal-overlay hidden" onclick="if(event.target.id==='newDayModal') closeNewDayModal()">
+    <div class="modal-card">
+      <button class="modal-close" onclick="closeNewDayModal()">✕</button>
+      <h2>📅 Start a New Day Session</h2>
+      <p style="color:#9ca3af;font-size:0.875rem;margin:0.5rem 0 1.25rem;">
+        This archives today's roster under a session name and starts a fresh sign-in list for a new date.
+        Existing student names carry over so returning attendees sign in faster.
+      </p>
+      <div class="form-group">
+        <label class="form-label">New Session Name</label>
+        <input type="text" id="newDayName" class="form-input" placeholder="e.g. Day 2 — March 6, 2026" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">New Session Date</label>
+        <input type="date" id="newDayDate" class="form-input" />
+      </div>
+      <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmNewDaySession()">🚀 Start New Day</button>
+        <button class="btn btn-ghost" onclick="closeNewDayModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ════════════════ TRAINING QR MODAL ════════════════ -->
   <div id="trainingQRModal" class="modal-overlay hidden" onclick="closeTrainingQROverlay(event)">
