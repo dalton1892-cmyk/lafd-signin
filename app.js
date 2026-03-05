@@ -80,10 +80,14 @@ function applyRoleBasedUI(role) {
   }
 
   if (role === 'student') {
-    // Export bar unnecessary for students
-    document.querySelectorAll('.btn-ghost, .btn-outline, .btn-primary').forEach(b => {
-      if (b.id !== 'submitBtn') b.style.display = 'none';
+    // Hide the main header and admin buttons, but KEEP the form active
+    document.querySelector('.app-header').style.display = 'none';
+
+    // Specifically hide the admin-related items while keeping form buttons
+    document.querySelectorAll('.header-actions .btn, .admin-only').forEach(el => {
+      el.style.display = 'none';
     });
+
     restrictFormForRole('student');
   }
 }
@@ -624,9 +628,16 @@ function clearLogo(side) {
 }
 
 function restoreLogo() {
-  const left = localStorage.getItem('lafd_logo_left') || localStorage.getItem('lafd_logo'); // legacy fallback
+  const left = localStorage.getItem('lafd_logo_left') || localStorage.getItem('lafd_logo');
   const right = localStorage.getItem('lafd_logo_right');
-  if (left) showLogo(left, 'left');
+
+  // LOGO FALLBACK: If on a phone (no local storage), use a default LAFD logo
+  if (left) {
+    showLogo(left, 'left');
+  } else {
+    showLogo('https://www.lafd.org/sites/default/files/lafd-logo-new.png', 'left');
+  }
+
   if (right) showLogo(right, 'right');
 }
 
@@ -685,9 +696,9 @@ function submitSignIn() {
     }
   }
 
+  // Auto-stamp if missing
   if (!currentStampedTime) {
-    showToast('⚠️ Please stamp your Current Date & Time first.');
-    return;
+    stampTimeIn();
   }
 
   // Only require ALL fields for admin; students/instructors get pre-filled fields
